@@ -8,12 +8,12 @@ from ultralytics import YOLO
 import cv2
 import time
 import io
-import threading
+import traceback
 
 # --- FastAPI App ---
 app = FastAPI(title="Smart Exercise & Posture Recognition - Human Detection API")
 
-# Allow requests from your frontend (be more strict in production)
+# Allow requests from your frontend (you can restrict in production)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -35,8 +35,9 @@ appliance_map = {
 # --- Load YOLO Model once at startup ---
 print("[INFO] Loading YOLOv8 model...")
 model = YOLO("yolov8n.pt")
+print("[INFO] Model loaded successfully.")
 
-# --- Response Schema ---
+# --- Response Schemas ---
 class CommandResult(BaseModel):
     zone: Tuple[int, int]
     status: str
@@ -47,8 +48,9 @@ class DetectionResponse(BaseModel):
     occupied_zones: List[Tuple[int, int]]
     commands: List[CommandResult]
 
+
 # -------------------------
-# Detection function (unchanged logic)
+# Detection function
 # -------------------------
 def run_detection() -> DetectionResponse:
     print("[INFO] Initializing PiCamera2...")
@@ -90,9 +92,8 @@ def run_detection() -> DetectionResponse:
     picam2.close()
     print("[INFO] Detection complete.")
 
-    # --- Compute Human Detection Percentage ---
     detection_rate = (frames_with_humans / processed_frames * 100) if processed_frames > 0 else 0
-    human_detected = detection_rate > 50.0  # True only if > 50%
+    human_detected = detection_rate > 50.0
 
     print(f"[INFO] Human detection rate: {detection_rate:.2f}%")
     print(f"[INFO] Human detected: {human_detected}")
@@ -120,8 +121,9 @@ def run_detection() -> DetectionResponse:
         commands=commands
     )
 
+
 # -------------------------
-# /detect endpoint (unchanged)
+# /detect endpoint (Safe Version)
 # -------------------------
 @app.post("/detect", response_model=DetectionResponse)
 def detect_human():
@@ -129,28 +131,29 @@ def detect_human():
         result = run_detection()
         return result
     except Exception as e:
-        import traceback
-        print("[ERROR]", traceback.format_exc())
-        return {"error": str(e)}
+        print("[ERROR] Exception during detection:", e)
+        traceback.print_exc()
+        return Response(
+            content='{"error": "Internal server error during detection"}',
+            media_type="application/json",
+            status_code=500
+        )
+
 
 # -------------------------
-# Simple MJPEG preview endpoint
+# MJPEG Preview Endpoint
 # -------------------------
 def mjpeg_stream_generator(duration_seconds=60):
-    """
-    Yields multipart JPEG frames from Picamera2 until closed or duration expires.
-    Note: accessing the camera from multiple endpoints may cause conflicts.
-    """
     picam2 = Picamera2()
     picam2.preview_configuration.main.size = (640, 480)
     picam2.preview_configuration.main.format = "RGB888"
     picam2.configure("preview")
     picam2.start()
     start = time.time()
+
     try:
         while True:
             frame = picam2.capture_array()
-            # convert RGB to BGR for OpenCV encoding
             bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
             ret, jpeg = cv2.imencode('.jpg', bgr)
             if not ret:
@@ -158,10 +161,8 @@ def mjpeg_stream_generator(duration_seconds=60):
             chunk = jpeg.tobytes()
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + chunk + b'\r\n')
-            # stop after duration_seconds if set
             if duration_seconds is not None and (time.time() - start) > duration_seconds:
                 break
-            # small sleep to limit frame rate
             time.sleep(0.05)
     finally:
         try:
@@ -169,17 +170,15 @@ def mjpeg_stream_generator(duration_seconds=60):
         except Exception:
             pass
 
+
 @app.get("/preview")
 def preview():
-    """
-    Open this URL in a browser to view a camera preview (MJPEG).
-    The stream will close after ~60 seconds by default or when the client closes.
-    """
     return StreamingResponse(mjpeg_stream_generator(duration_seconds=60),
                              media_type='multipart/x-mixed-replace; boundary=frame')
 
+
 # -------------------------
-# UI: Serve a simple HTML page with button
+# Simple UI Page
 # -------------------------
 HTML_UI = """
 <!doctype html>
@@ -212,36 +211,32 @@ HTML_UI = """
       const statusDiv = document.getElementById('status');
       const resultPre = document.getElementById('result');
       const previewDiv = document.getElementById('preview');
-      const previewImg = document.getElementById('previewImg');
 
       startBtn.onclick = async () => {
-        // show preview image area
         previewDiv.style.display = 'block';
         resultPre.style.display = 'none';
         statusDiv.innerText = 'Opening camera preview...';
 
-        // small delay to allow browser to start preview before detection
         await new Promise(r => setTimeout(r, 800));
 
         try {
-  statusDiv.innerText = 'Running detection for 5 seconds...';
-  const res = await fetch('/detect', { method: 'POST' });
-  const text = await res.text(); // first get text
-  let data;
-  try {
-    data = JSON.parse(text); // then try parsing JSON
-  } catch {
-    throw new Error("Invalid JSON response:\n" + text);
-  }
-
-  statusDiv.innerText = 'Detection complete.';
-  resultPre.style.display = 'block';
-  resultPre.innerText = JSON.stringify(data, null, 2);
-} catch (err) {
-  statusDiv.innerText = 'Error calling /detect: ' + err.message;
-  resultPre.style.display = 'block';
-  resultPre.innerText = String(err);
-}
+          statusDiv.innerText = 'Running detection for 5 seconds...';
+          const res = await fetch('/detect', { method: 'POST' });
+          const text = await res.text(); // safer parsing
+          let data;
+          try {
+            data = JSON.parse(text);
+          } catch {
+            throw new Error(text);
+          }
+          statusDiv.innerText = 'Detection complete.';
+          resultPre.style.display = 'block';
+          resultPre.innerText = JSON.stringify(data, null, 2);
+        } catch (err) {
+          statusDiv.innerText = 'Error calling /detect: ' + err;
+          resultPre.style.display = 'block';
+          resultPre.innerText = String(err);
+        }
       };
     </script>
   </body>
@@ -251,6 +246,7 @@ HTML_UI = """
 @app.get("/ui", response_class=HTMLResponse)
 def ui():
     return HTMLResponse(content=HTML_UI, status_code=200)
+
 
 # --- Root Route ---
 @app.get("/")
