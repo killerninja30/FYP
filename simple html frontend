@@ -125,8 +125,13 @@ def run_detection() -> DetectionResponse:
 # -------------------------
 @app.post("/detect", response_model=DetectionResponse)
 def detect_human():
-    result = run_detection()
-    return result
+    try:
+        result = run_detection()
+        return result
+    except Exception as e:
+        import traceback
+        print("[ERROR]", traceback.format_exc())
+        return {"error": str(e)}
 
 # -------------------------
 # Simple MJPEG preview endpoint
@@ -219,17 +224,24 @@ HTML_UI = """
         await new Promise(r => setTimeout(r, 800));
 
         try {
-          statusDiv.innerText = 'Running detection for 5 seconds...';
-          const res = await fetch('/detect', { method: 'POST' });
-          const data = await res.json();
-          statusDiv.innerText = 'Detection complete.';
-          resultPre.style.display = 'block';
-          resultPre.innerText = JSON.stringify(data, null, 2);
-        } catch (err) {
-          statusDiv.innerText = 'Error calling /detect: ' + err;
-          resultPre.style.display = 'block';
-          resultPre.innerText = String(err);
-        }
+  statusDiv.innerText = 'Running detection for 5 seconds...';
+  const res = await fetch('/detect', { method: 'POST' });
+  const text = await res.text(); // first get text
+  let data;
+  try {
+    data = JSON.parse(text); // then try parsing JSON
+  } catch {
+    throw new Error("Invalid JSON response:\n" + text);
+  }
+
+  statusDiv.innerText = 'Detection complete.';
+  resultPre.style.display = 'block';
+  resultPre.innerText = JSON.stringify(data, null, 2);
+} catch (err) {
+  statusDiv.innerText = 'Error calling /detect: ' + err.message;
+  resultPre.style.display = 'block';
+  resultPre.innerText = String(err);
+}
       };
     </script>
   </body>
