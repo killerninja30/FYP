@@ -1,0 +1,246 @@
+from fastapi import FastAPI, Response
+from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List, Tuple
+from picamera2 import Picamera2
+from ultralytics import YOLO
+import cv2
+import time
+import io
+import threading
+
+# --- FastAPI App ---
+app = FastAPI(title="Smart Exercise & Posture Recognition - Human Detection API")
+
+# Allow requests from your frontend (be more strict in production)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Detection Configuration ---
+DURATION = 5
+FRAME_SKIP = 5
+GRID_ROWS, GRID_COLS = 3, 3
+
+appliance_map = {
+    (0, 0): ["Light 1 (Back Left)"], (0, 1): ["Light 2 (Back Center)"], (0, 2): ["Light 3 (Back Right)"],
+    (1, 0): ["Fan 1 (Mid Left)"],    (1, 1): ["Projector"],             (1, 2): ["Fan 2 (Mid Right)"],
+    (2, 0): ["Light 4 (Front Left)"], (2, 1): ["Light 5 (Front Center)"], (2, 2): ["Light 6 (Front Right)"]
+}
+
+# --- Load YOLO Model once at startup ---
+print("[INFO] Loading YOLOv8 model...")
+model = YOLO("yolov8n.pt")
+
+# --- Response Schema ---
+class CommandResult(BaseModel):
+    zone: Tuple[int, int]
+    status: str
+    appliances: List[str]
+
+class DetectionResponse(BaseModel):
+    human_detected: bool
+    occupied_zones: List[Tuple[int, int]]
+    commands: List[CommandResult]
+
+# -------------------------
+# Detection function (unchanged logic)
+# -------------------------
+def run_detection() -> DetectionResponse:
+    print("[INFO] Initializing PiCamera2...")
+    picam2 = Picamera2()
+    picam2.preview_configuration.main.size = (640, 480)
+    picam2.preview_configuration.main.format = "RGB888"
+    picam2.configure("preview")
+    picam2.start()
+
+    start_time = time.time()
+    frame_count = 0
+    processed_frames = 0
+    frames_with_humans = 0
+    last_occupied_grids = set()
+
+    print(f"[INFO] Running detection for {DURATION} seconds...")
+    while (time.time() - start_time) < DURATION:
+        frame = picam2.capture_array()
+        h, w, _ = frame.shape
+        cell_h, cell_w = h // GRID_ROWS, w // GRID_COLS
+        frame_count += 1
+
+        if frame_count % FRAME_SKIP == 0:
+            processed_frames += 1
+            results = model(frame, classes=0, conf=0.5, verbose=False)
+            current_frame_grids = set()
+
+            for r in results:
+                if len(r.boxes) > 0:
+                    frames_with_humans += 1
+                for box in r.boxes:
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                    center_x, center_y = (x1 + x2) / 2, (y1 + y2) / 2
+                    grid_col, grid_row = int(center_x // cell_w), int(center_y // cell_h)
+                    if 0 <= grid_row < GRID_ROWS and 0 <= grid_col < GRID_COLS:
+                        current_frame_grids.add((grid_row, grid_col))
+            last_occupied_grids = current_frame_grids
+
+    picam2.close()
+    print("[INFO] Detection complete.")
+
+    # --- Compute Human Detection Percentage ---
+    detection_rate = (frames_with_humans / processed_frames * 100) if processed_frames > 0 else 0
+    human_detected = detection_rate > 50.0  # True only if > 50%
+
+    print(f"[INFO] Human detection rate: {detection_rate:.2f}%")
+    print(f"[INFO] Human detected: {human_detected}")
+
+    # --- Build Command Logic ---
+    commands = []
+    if human_detected:
+        for r in range(GRID_ROWS):
+            for c in range(GRID_COLS):
+                zone = (r, c)
+                appliances = appliance_map.get(zone, [])
+                if not appliances:
+                    continue
+                if zone in last_occupied_grids:
+                    commands.append(CommandResult(zone=zone, status="ON", appliances=appliances))
+                else:
+                    commands.append(CommandResult(zone=zone, status="OFF", appliances=appliances))
+    else:
+        for zone, appliances in appliance_map.items():
+            commands.append(CommandResult(zone=zone, status="OFF", appliances=appliances))
+
+    return DetectionResponse(
+        human_detected=human_detected,
+        occupied_zones=list(last_occupied_grids),
+        commands=commands
+    )
+
+# -------------------------
+# /detect endpoint (unchanged)
+# -------------------------
+@app.post("/detect", response_model=DetectionResponse)
+def detect_human():
+    result = run_detection()
+    return result
+
+# -------------------------
+# Simple MJPEG preview endpoint
+# -------------------------
+def mjpeg_stream_generator(duration_seconds=60):
+    """
+    Yields multipart JPEG frames from Picamera2 until closed or duration expires.
+    Note: accessing the camera from multiple endpoints may cause conflicts.
+    """
+    picam2 = Picamera2()
+    picam2.preview_configuration.main.size = (640, 480)
+    picam2.preview_configuration.main.format = "RGB888"
+    picam2.configure("preview")
+    picam2.start()
+    start = time.time()
+    try:
+        while True:
+            frame = picam2.capture_array()
+            # convert RGB to BGR for OpenCV encoding
+            bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            ret, jpeg = cv2.imencode('.jpg', bgr)
+            if not ret:
+                continue
+            chunk = jpeg.tobytes()
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + chunk + b'\r\n')
+            # stop after duration_seconds if set
+            if duration_seconds is not None and (time.time() - start) > duration_seconds:
+                break
+            # small sleep to limit frame rate
+            time.sleep(0.05)
+    finally:
+        try:
+            picam2.close()
+        except Exception:
+            pass
+
+@app.get("/preview")
+def preview():
+    """
+    Open this URL in a browser to view a camera preview (MJPEG).
+    The stream will close after ~60 seconds by default or when the client closes.
+    """
+    return StreamingResponse(mjpeg_stream_generator(duration_seconds=60),
+                             media_type='multipart/x-mixed-replace; boundary=frame')
+
+# -------------------------
+# UI: Serve a simple HTML page with button
+# -------------------------
+HTML_UI = """
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Human Detection UI</title>
+    <style>
+      body { font-family: Arial, sans-serif; text-align:center; margin:40px; }
+      button { padding:12px 20px; font-size:16px; border-radius:8px; cursor:pointer; }
+      pre { text-align:left; display:inline-block; margin-top:20px; background:#f6f6f6; padding:10px; border-radius:6px; }
+      #preview { margin-top:20px; border:1px solid #ddd; width:640px; height:480px; }
+    </style>
+  </head>
+  <body>
+    <h1>Smart Human Detection</h1>
+    <p>
+      <button id="startBtn">Start Detection (opens preview & runs 5s)</button>
+    </p>
+    <div id="status"></div>
+
+    <div id="preview" style="display:none;">
+      <img id="previewImg" src="/preview" alt="camera preview" width="640" height="480"/>
+    </div>
+
+    <pre id="result" style="display:none;"></pre>
+
+    <script>
+      const startBtn = document.getElementById('startBtn');
+      const statusDiv = document.getElementById('status');
+      const resultPre = document.getElementById('result');
+      const previewDiv = document.getElementById('preview');
+      const previewImg = document.getElementById('previewImg');
+
+      startBtn.onclick = async () => {
+        // show preview image area
+        previewDiv.style.display = 'block';
+        resultPre.style.display = 'none';
+        statusDiv.innerText = 'Opening camera preview...';
+
+        // small delay to allow browser to start preview before detection
+        await new Promise(r => setTimeout(r, 800));
+
+        try {
+          statusDiv.innerText = 'Running detection for 5 seconds...';
+          const res = await fetch('/detect', { method: 'POST' });
+          const data = await res.json();
+          statusDiv.innerText = 'Detection complete.';
+          resultPre.style.display = 'block';
+          resultPre.innerText = JSON.stringify(data, null, 2);
+        } catch (err) {
+          statusDiv.innerText = 'Error calling /detect: ' + err;
+          resultPre.style.display = 'block';
+          resultPre.innerText = String(err);
+        }
+      };
+    </script>
+  </body>
+</html>
+"""
+
+@app.get("/ui", response_class=HTMLResponse)
+def ui():
+    return HTMLResponse(content=HTML_UI, status_code=200)
+
+# --- Root Route ---
+@app.get("/")
+def root():
+    return {"message": "Smart Exercise & Posture Recognition API is running!"}
