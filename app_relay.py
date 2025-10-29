@@ -39,6 +39,7 @@ DURATION = 5
 FRAME_SKIP = 5
 GRID_ROWS, GRID_COLS = 2, 2
 
+# Map zones to appliances
 appliance_map = {
     (0, 0): ["Left Zone"], 
     (0, 1): ["Right Zone"],
@@ -91,12 +92,9 @@ def get_camera():
 
 # --- Relay Control Function ---
 def control_relays(occupied_zones: List[Tuple[int,int]]):
-    for zone, pin in [(0,2),(1,3)]:  # Left -> pin2, Right -> pin3
-        # If any occupied zone is in left/right half, turn ON relay
-        if any(z[1] == zone for z in occupied_zones):
-            GPIO.output(pin, GPIO.LOW)
-        else:
-            GPIO.output(pin, GPIO.HIGH)
+    # Left half (col=0) -> Relay 2, Right half (col=1) -> Relay 3
+    GPIO.output(2, GPIO.LOW if any(z[1]==0 for z in occupied_zones) else GPIO.HIGH)
+    GPIO.output(3, GPIO.LOW if any(z[1]==1 for z in occupied_zones) else GPIO.HIGH)
 
 # --- Detection Function ---
 def run_detection() -> DetectionResponse:
@@ -107,7 +105,6 @@ def run_detection() -> DetectionResponse:
     start_time = time.time()
     frame_count = 0
     processed_frames = 0
-    frames_with_humans = 0
     last_occupied_grids = set()
 
     while (time.time() - start_time) < DURATION:
@@ -118,13 +115,16 @@ def run_detection() -> DetectionResponse:
 
         if frame_count % FRAME_SKIP == 0:
             processed_frames += 1
-            results = model(frame, classes=0, conf=0.5, verbose=False)
+            results = model(frame, classes=0, conf=0.3, verbose=False)  # lower threshold
             current_frame_grids = set()
             for r in results:
+                if len(r.boxes) == 0:
+                    continue
                 for box in r.boxes:
-                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                    # Convert tensor to numpy
+                    x1, y1, x2, y2 = box.xyxy.cpu().numpy()[0]
                     center_x, center_y = (x1 + x2)/2, (y1 + y2)/2
-                    grid_col, grid_row = int(center_x//cell_w), int(center_y//cell_h)
+                    grid_col, grid_row = int(center_x // cell_w), int(center_y // cell_h)
                     if 0 <= grid_row < GRID_ROWS and 0 <= grid_col < GRID_COLS:
                         current_frame_grids.add((grid_row, grid_col))
             last_occupied_grids = current_frame_grids
@@ -158,7 +158,7 @@ def mjpeg_stream_generator(duration_seconds=60):
     try:
         while True:
             frame = picam2.capture_array()
-            # Draw grid lines
+            # Draw 2x2 grid
             for r in range(1, GRID_ROWS):
                 cv2.line(frame, (0, r*cell_h), (w, r*cell_h), (0,255,0), 2)
             for c in range(1, GRID_COLS):
