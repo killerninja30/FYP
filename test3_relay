@@ -24,7 +24,7 @@ def cleanup_gpio():
 atexit.register(cleanup_gpio)
 
 # --- FastAPI App ---
-app = FastAPI(title="Smart Human Detection with Grid Mapping")
+app = FastAPI(title="Smart Human Detection with 2x2 Grid")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -35,19 +35,19 @@ app.add_middleware(
 # --- Detection Settings ---
 DURATION = 5  # seconds
 FRAME_SKIP = 5
-GRID_ROWS, GRID_COLS = 3, 3  # You can increase or decrease this
+GRID_ROWS, GRID_COLS = 2, 2  # Fixed 2x2 grid
 
 # --- YOLO and Camera ---
-model = YOLO("yolov8n.pt")  # Make sure the file exists
+model = YOLO("yolov8n.pt")  # Ensure the file exists
 picam2 = Picamera2()
 picam2.configure(picam2.create_preview_configuration(main={"size": (640, 480)}))
 picam2.start()
 
 # --- Relay Control ---
 def control_relays(occupied_zones: List[Tuple[int, int]]):
-    # Left half (col=0,1) -> GPIO 2 | Right half (col=2) -> GPIO 3
-    left_occupied = any(z[1] in [0, 1] for z in occupied_zones)
-    right_occupied = any(z[1] == 2 for z in occupied_zones)
+    # Left half -> GPIO 2 | Right half -> GPIO 3
+    left_occupied = any(z[1] == 0 for z in occupied_zones)
+    right_occupied = any(z[1] == 1 for z in occupied_zones)
 
     GPIO.output(2, GPIO.LOW if left_occupied else GPIO.HIGH)
     GPIO.output(3, GPIO.LOW if right_occupied else GPIO.HIGH)
@@ -82,6 +82,13 @@ def run_detection():
         for r in results:
             for box in r.boxes:
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                cls_id = int(box.cls[0])
+                label = model.names[cls_id]
+
+                # Only detect humans
+                if label != "person":
+                    continue
+
                 center_x, center_y = (x1 + x2) / 2, (y1 + y2) / 2
                 grid_col = min(int(center_x // cell_w), GRID_COLS - 1)
                 grid_row = min(int(center_y // cell_h), GRID_ROWS - 1)
@@ -91,8 +98,7 @@ def run_detection():
         frame_detections[processed_frames] = list(current_frame_grids)
         last_occupied_grids |= current_frame_grids
 
-        # Debugging output
-        print(f"[FRAME {processed_frames}] Humans Detected: {len(results[0].boxes)} | Zones: {current_frame_grids}")
+        print(f"[FRAME {processed_frames}] Humans Detected: {len(current_frame_grids)} | Zones: {current_frame_grids}")
 
     control_relays(list(last_occupied_grids))
 
@@ -147,9 +153,9 @@ def preview():
 HTML_UI = """
 <!doctype html>
 <html>
-<head><meta charset="utf-8"/><title>Human Detection Grid</title></head>
+<head><meta charset="utf-8"/><title>Human Detection (2x2 Grid)</title></head>
 <body>
-<h1>Smart Human Detection (Grid-Based)</h1>
+<h1>Smart Human Detection (2x2 Grid Zones)</h1>
 <button id="startBtn">Start Detection</button>
 <div id="status"></div>
 <div id="preview" style="display:none;"><img src="/preview" width="640" height="480"/></div>
@@ -180,4 +186,4 @@ def ui():
 
 @app.get("/")
 def root():
-    return {"message": "Smart Human Detection Grid API is running!"}
+    return {"message": "Smart Human Detection 2x2 Grid API is running!"}
