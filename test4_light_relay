@@ -1,0 +1,287 @@
+from fastapi import FastAPI, Response
+from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List, Tuple
+from picamera2 import Picamera2
+from ultralytics import YOLO
+import cv2
+import time
+import threading
+import traceback
+import RPi.GPIO as GPIO
+
+# ==========================================================
+# --- FASTAPI APP SETUP ---
+# ==========================================================
+app = FastAPI(title="Smart Exercise & Posture Recognition API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ==========================================================
+# --- RELAY CONFIGURATION (GPIO PINS: 2, 3, 4, 17) ---
+# ==========================================================
+RELAY_PINS = [2, 3, 4, 17]  # BCM numbering
+
+GPIO.setmode(GPIO.BCM)
+for pin in RELAY_PINS:
+    GPIO.setup(pin, GPIO.OUT)
+    GPIO.output(pin, GPIO.HIGH)  # Relay OFF initially (active LOW)
+
+def turn_off_all_relays():
+    for pin in RELAY_PINS:
+        GPIO.output(pin, GPIO.HIGH)
+
+# ==========================================================
+# --- DETECTION SETTINGS ---
+# ==========================================================
+DURATION = 5
+FRAME_SKIP = 5
+GRID_ROWS, GRID_COLS = 3, 3
+
+appliance_map = {
+    (0,0):["Light 1 (Back Left)"], (0,1):["Light 2 (Back Center)"], (0,2):["Light 3 (Back Right)"],
+    (1,0):["Fan 1 (Mid Left)"], (1,1):["Projector"], (1,2):["Fan 2 (Mid Right)"],
+    (2,0):["Light 4 (Front Left)"], (2,1):["Light 5 (Front Center)"], (2,2):["Light 6 (Front Right)"]
+}
+
+print("[INFO] Loading YOLOv8 model...")
+model = YOLO("yolov8n.pt")
+print("[INFO] Model loaded successfully.")
+
+# ==========================================================
+# --- RESPONSE SCHEMAS ---
+# ==========================================================
+class CommandResult(BaseModel):
+    zone: Tuple[int, int]
+    status: str
+    appliances: List[str]
+
+class DetectionResponse(BaseModel):
+    human_detected: bool
+    occupied_zones: List[Tuple[int, int]]
+    commands: List[CommandResult]
+
+# ==========================================================
+# --- CAMERA HANDLER ---
+# ==========================================================
+camera_lock = threading.Lock()
+camera_instance = None
+
+def get_camera():
+    global camera_instance
+    with camera_lock:
+        if camera_instance is None:
+            try:
+                camera_instance = Picamera2()
+                camera_instance.preview_configuration.main.size = (640, 480)
+                camera_instance.preview_configuration.main.format = "RGB888"
+                camera_instance.configure("preview")
+                camera_instance.start()
+            except Exception as e:
+                print("[ERROR] Camera init failed:", e)
+                camera_instance = None
+        return camera_instance
+
+# ==========================================================
+# --- DETECTION FUNCTION ---
+# ==========================================================
+def run_detection() -> DetectionResponse:
+    picam2 = get_camera()
+    if picam2 is None:
+        raise RuntimeError("Camera not available")
+
+    start_time = time.time()
+    frame_count = 0
+    processed_frames = 0
+    frames_with_humans = 0
+    last_occupied_grids = set()
+
+    while (time.time() - start_time) < DURATION:
+        frame = picam2.capture_array()
+        h, w, _ = frame.shape
+        cell_h, cell_w = h // GRID_ROWS, w // GRID_COLS
+        frame_count += 1
+
+        if frame_count % FRAME_SKIP == 0:
+            processed_frames += 1
+            results = model(frame, classes=0, conf=0.25, verbose=False)
+            current_frame_grids = set()
+
+            for r in results:
+                if len(r.boxes) > 0:
+                    frames_with_humans += 1
+                for box in r.boxes:
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                    center_x, center_y = (x1 + x2) / 2, (y1 + y2) / 2
+                    grid_col, grid_row = int(center_x // cell_w), int(center_y // cell_h)
+                    if 0 <= grid_row < GRID_ROWS and 0 <= grid_col < GRID_COLS:
+                        current_frame_grids.add((grid_row, grid_col))
+
+            last_occupied_grids = current_frame_grids
+
+    detection_rate = (frames_with_humans / processed_frames * 100) if processed_frames > 0 else 0
+    human_detected = frames_with_humans > 0
+
+    print(f"[DEBUG] Processed={processed_frames}, FramesWithHumans={frames_with_humans}, DetectionRate={detection_rate:.2f}%, HumanDetected={human_detected}")
+
+    commands = []
+
+    if human_detected:
+        active_columns = set([c for (_, c) in last_occupied_grids])
+
+        # --- Relay control based on COLUMN occupancy ---
+        # Col 0 → GPIO 2
+        # Col 1 → GPIO 3
+        # Col 2 → GPIO 4 and 17
+        if 0 in active_columns:
+            GPIO.output(2, GPIO.LOW)
+            print("[RELAY] GPIO 2 -> ON")
+        else:
+            GPIO.output(2, GPIO.HIGH)
+            print("[RELAY] GPIO 2 -> OFF")
+
+        if 1 in active_columns:
+            GPIO.output(3, GPIO.LOW)
+            print("[RELAY] GPIO 3 -> ON")
+        else:
+            GPIO.output(3, GPIO.HIGH)
+            print("[RELAY] GPIO 3 -> OFF")
+
+        if 2 in active_columns:
+            GPIO.output(4, GPIO.LOW)
+            GPIO.output(17, GPIO.LOW)
+            print("[RELAY] GPIO 4 -> ON, GPIO 17 -> ON")
+        else:
+            GPIO.output(4, GPIO.HIGH)
+            GPIO.output(17, GPIO.HIGH)
+            print("[RELAY] GPIO 4 -> OFF, GPIO 17 -> OFF")
+
+        # Log detected zones
+        for (r, c) in last_occupied_grids:
+            appliances = appliance_map.get((r, c), [])
+            commands.append(CommandResult(zone=(r, c), status="ON", appliances=appliances))
+
+    else:
+        turn_off_all_relays()
+        for zone, appliances in appliance_map.items():
+            commands.append(CommandResult(zone=zone, status="OFF", appliances=appliances))
+
+    return DetectionResponse(
+        human_detected=human_detected,
+        occupied_zones=list(last_occupied_grids),
+        commands=commands
+    )
+
+# ==========================================================
+# --- API ENDPOINTS ---
+# ==========================================================
+@app.post("/detect", response_model=DetectionResponse)
+def detect_human():
+    try:
+        return run_detection()
+    except Exception as e:
+        print("[ERROR] Detection failed:", e)
+        traceback.print_exc()
+        turn_off_all_relays()
+        return Response(
+            content='{"error": "Internal server error during detection"}',
+            media_type="application/json",
+            status_code=500
+        )
+
+@app.on_event("shutdown")
+def cleanup_gpio():
+    print("[INFO] Cleaning up GPIO...")
+    GPIO.cleanup()
+
+# ==========================================================
+# --- MJPEG PREVIEW WITH GRID OVERLAY ---
+# ==========================================================
+def mjpeg_stream_generator(duration_seconds=60):
+    picam2 = get_camera()
+    if picam2 is None:
+        yield b"--frame\r\nContent-Type: text/plain\r\n\r\nCamera not available\r\n"
+        return
+    start = time.time()
+    try:
+        while True:
+            frame = picam2.capture_array()
+            bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            h, w, _ = bgr.shape
+            cell_h, cell_w = h // GRID_ROWS, w // GRID_COLS
+
+            # --- Draw grid lines ---
+            for i in range(1, GRID_ROWS):
+                cv2.line(bgr, (0, i * cell_h), (w, i * cell_h), (0, 255, 0), 1)
+            for j in range(1, GRID_COLS):
+                cv2.line(bgr, (j * cell_w, 0), (j * cell_w, h), (0, 255, 0), 1)
+
+            # --- Column labels ---
+            for j in range(GRID_COLS):
+                cv2.putText(bgr, f"Col {j}", (j * cell_w + 10, 20),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+
+            ret, jpeg = cv2.imencode(".jpg", bgr)
+            if not ret:
+                continue
+            chunk = jpeg.tobytes()
+            yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + chunk + b'\r\n')
+            if duration_seconds and (time.time() - start) > duration_seconds:
+                break
+            time.sleep(0.05)
+    except Exception as e:
+        print("[ERROR] MJPEG stream failed:", e)
+
+@app.get("/preview")
+def preview():
+    return StreamingResponse(
+        mjpeg_stream_generator(duration_seconds=60),
+        media_type="multipart/x-mixed-replace; boundary=frame"
+    )
+
+# ==========================================================
+# --- SIMPLE UI ---
+# ==========================================================
+HTML_UI = """
+<!doctype html>
+<html>
+<head><meta charset="utf-8"/><title>Smart Human Detection</title></head>
+<body>
+<h1>Smart Human Detection</h1>
+<button id="startBtn">Start Detection</button>
+<div id="status"></div>
+<div id="preview" style="display:none;"><img src="/preview" width="640" height="480"/></div>
+<pre id="result" style="display:none;"></pre>
+<script>
+const btn=document.getElementById('startBtn');
+const status=document.getElementById('status');
+const result=document.getElementById('result');
+const preview=document.getElementById('preview');
+btn.onclick=async()=>{
+  preview.style.display='block'; result.style.display='none'; status.innerText='Running detection...';
+  try{
+    const res=await fetch('/detect',{method:'POST'});
+    const text=await res.text(); let data;
+    try{data=JSON.parse(text);}catch{throw new Error(text);}
+    result.style.display='block'; result.innerText=JSON.stringify(data,null,2);
+    status.innerText='Detection complete.';
+  }catch(err){status.innerText='Error: '+err; result.style.display='block'; result.innerText=String(err);}
+};
+</script>
+</body>
+</html>
+"""
+
+@app.get("/ui", response_class=HTMLResponse)
+def ui():
+    return HTMLResponse(content=HTML_UI, status_code=200)
+
+@app.get("/")
+def root():
+    return {"message": "Smart Exercise & Posture Recognition API with Relay Control is running!"}
