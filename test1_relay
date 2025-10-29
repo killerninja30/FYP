@@ -138,21 +138,40 @@ def run_detection() -> DetectionResponse:
             last_occupied_grids = current_frame_grids
 
     detection_rate = (frames_with_humans / processed_frames * 100) if processed_frames > 0 else 0
-    human_detected = frames_with_humans > 0  # Loosened condition
+    human_detected = frames_with_humans > 0
 
     print(f"[DEBUG] Processed={processed_frames}, FramesWithHumans={frames_with_humans}, DetectionRate={detection_rate:.2f}%, HumanDetected={human_detected}")
 
     commands = []
 
     if human_detected:
-        active_rows = set()
+        active_columns = set([c for (_, c) in last_occupied_grids])
+
+        # --- Relay control logic ---
+        # GPIO 2 -> ON if human in col 0 or 1
+        # GPIO 3 -> ON if human in col 1 or 2
+        if 0 in active_columns or 1 in active_columns:
+            GPIO.output(2, GPIO.LOW)
+            print("[RELAY] GPIO 2 -> ON")
+        else:
+            GPIO.output(2, GPIO.HIGH)
+            print("[RELAY] GPIO 2 -> OFF")
+
+        if 1 in active_columns or 2 in active_columns:
+            GPIO.output(3, GPIO.LOW)
+            print("[RELAY] GPIO 3 -> ON")
+        else:
+            GPIO.output(3, GPIO.HIGH)
+            print("[RELAY] GPIO 3 -> OFF")
+
+        # Optional: You can still keep other pins OFF
+        GPIO.output(4, GPIO.HIGH)
+        GPIO.output(17, GPIO.HIGH)
+
+        # Log detected zones
         for (r, c) in last_occupied_grids:
-            active_rows.add(r)
             appliances = appliance_map.get((r, c), [])
             commands.append(CommandResult(zone=(r, c), status="ON", appliances=appliances))
-
-        for row in range(GRID_ROWS):
-            set_relay_state(row, "ON" if row in active_rows else "OFF")
 
     else:
         turn_off_all_relays()
