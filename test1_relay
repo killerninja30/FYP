@@ -122,7 +122,7 @@ def run_detection() -> DetectionResponse:
 
         if frame_count % FRAME_SKIP == 0:
             processed_frames += 1
-            results = model(frame, classes=0, conf=0.5, verbose=False)
+            results = model(frame, classes=0, conf=0.25, verbose=False)
             current_frame_grids = set()
 
             for r in results:
@@ -138,7 +138,9 @@ def run_detection() -> DetectionResponse:
             last_occupied_grids = current_frame_grids
 
     detection_rate = (frames_with_humans / processed_frames * 100) if processed_frames > 0 else 0
-    human_detected = detection_rate > 50.0
+    human_detected = frames_with_humans > 0  # Loosened condition
+
+    print(f"[DEBUG] Processed={processed_frames}, FramesWithHumans={frames_with_humans}, DetectionRate={detection_rate:.2f}%, HumanDetected={human_detected}")
 
     commands = []
 
@@ -149,12 +151,10 @@ def run_detection() -> DetectionResponse:
             appliances = appliance_map.get((r, c), [])
             commands.append(CommandResult(zone=(r, c), status="ON", appliances=appliances))
 
-        # --- Update relays ---
         for row in range(GRID_ROWS):
             set_relay_state(row, "ON" if row in active_rows else "OFF")
 
     else:
-        # No human detected → all relays OFF
         turn_off_all_relays()
         for zone, appliances in appliance_map.items():
             commands.append(CommandResult(zone=zone, status="OFF", appliances=appliances))
