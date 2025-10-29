@@ -1,0 +1,179 @@
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from typing import List, Tuple
+from picamera2 import Picamera2
+from ultralytics import YOLO
+import cv2
+import time
+import threading
+import traceback
+import atexit
+import RPi.GPIO as GPIO
+
+# --- Relay Setup ---
+GPIO.setmode(GPIO.BCM)
+relay_pins = [2, 3]  # GPIO 2 = Left Zone, GPIO 3 = Right Zone
+for pin in relay_pins:
+    GPIO.setup(pin, GPIO.OUT)
+    GPIO.output(pin, GPIO.HIGH)  # HIGH = OFF
+
+def cleanup_gpio():
+    GPIO.cleanup()
+    print("[INFO] GPIO cleaned up!")
+
+atexit.register(cleanup_gpio)
+
+# --- FastAPI App ---
+app = FastAPI(title="Smart Exercise & Posture Recognition API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Detection Settings ---
+DURATION = 5  # seconds to run detection
+FRAME_SKIP = 5
+GRID_ROWS, GRID_COLS = 2, 2
+
+# --- Model and Camera ---
+model = YOLO("yolov8n.pt")  # Make sure this model file exists
+picam2 = Picamera2()
+picam2.configure(picam2.create_preview_configuration(main={"size": (640, 480)}))
+picam2.start()
+
+# --- Relay Control ---
+def control_relays(occupied_zones: List[Tuple[int, int]]):
+    # Left half (col=0) -> Relay on GPIO 2
+    # Right half (col=1) -> Relay on GPIO 3
+    GPIO.output(2, GPIO.LOW if any(z[1] == 0 for z in occupied_zones) else GPIO.HIGH)
+    GPIO.output(3, GPIO.LOW if any(z[1] == 1 for z in occupied_zones) else GPIO.HIGH)
+
+# --- Detection Function ---
+def run_detection():
+    start_time = time.time()
+    frame_count = 0
+    processed_frames = 0
+    last_occupied_grids = set()
+
+    print("[INFO] Starting detection...")
+    frame = picam2.capture_array()
+    h, w, _ = frame.shape
+    cell_h, cell_w = h // GRID_ROWS, w // GRID_COLS
+
+    while (time.time() - start_time) < DURATION:
+        frame = picam2.capture_array()
+        frame_count += 1
+
+        if frame_count % FRAME_SKIP != 0:
+            continue
+
+        processed_frames += 1
+
+        # Convert to BGR before feeding to YOLO
+        bgr_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+        # Run YOLO detection (conf=0.3, detect all classes)
+        results = model(bgr_frame, conf=0.3, verbose=False)
+
+        current_frame_grids = set()
+        for r in results:
+            for box in r.boxes:
+                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                center_x, center_y = (x1 + x2) / 2, (y1 + y2) / 2
+                grid_col = min(int(center_x // cell_w), GRID_COLS - 1)
+                grid_row = min(int(center_y // cell_h), GRID_ROWS - 1)
+                current_frame_grids.add((grid_row, grid_col))
+
+        # Merge zones across frames
+        last_occupied_grids |= current_frame_grids
+
+        # Debugging output
+        print(f"[FRAME {processed_frames}] Detections: {len(results[0].boxes)} | Zones: {current_frame_grids}")
+
+    # Control relays based on detected zones
+    control_relays(list(last_occupied_grids))
+
+    print(f"[INFO] Detection complete. Occupied zones: {last_occupied_grids}")
+    return {"occupied_zones": list(last_occupied_grids), "frames_processed": processed_frames}
+
+# --- MJPEG Stream Generator ---
+def mjpeg_stream_generator(duration_seconds=None):
+    start = time.time()
+    while True:
+        frame = picam2.capture_array()
+        h, w, _ = frame.shape
+        cell_h, cell_w = h // GRID_ROWS, w // GRID_COLS
+
+        # Draw 2x2 grid overlay
+        for r in range(1, GRID_ROWS):
+            cv2.line(frame, (0, r * cell_h), (w, r * cell_h), (0, 255, 0), 2)
+        for c in range(1, GRID_COLS):
+            cv2.line(frame, (c * cell_w, 0), (c * cell_w, h), (0, 255, 0), 2)
+
+        bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        ret, jpeg = cv2.imencode(".jpg", bgr)
+        if not ret:
+            continue
+        chunk = jpeg.tobytes()
+        yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + chunk + b'\r\n')
+
+        if duration_seconds and (time.time() - start) > duration_seconds:
+            break
+        time.sleep(0.05)
+
+# --- FastAPI Routes ---
+@app.post("/detect")
+def detect():
+    try:
+        return run_detection()
+    except Exception as e:
+        traceback.print_exc()
+        return {"error": str(e)}
+
+@app.get("/preview")
+def preview():
+    return StreamingResponse(
+        mjpeg_stream_generator(duration_seconds=60),
+        media_type="multipart/x-mixed-replace; boundary=frame"
+    )
+
+HTML_UI = """
+<!doctype html>
+<html>
+<head><meta charset="utf-8"/><title>Human Detection UI</title></head>
+<body>
+<h1>Smart Human Detection</h1>
+<button id="startBtn">Start Detection</button>
+<div id="status"></div>
+<div id="preview" style="display:none;"><img src="/preview" width="640" height="480"/></div>
+<pre id="result" style="display:none;"></pre>
+<script>
+const btn=document.getElementById('startBtn');
+const status=document.getElementById('status');
+const result=document.getElementById('result');
+const preview=document.getElementById('preview');
+btn.onclick=async()=>{
+  preview.style.display='block'; result.style.display='none'; status.innerText='Running detection...';
+  try{
+    const res=await fetch('/detect',{method:'POST'});
+    const text=await res.text(); let data;
+    try{data=JSON.parse(text);}catch{throw new Error(text);}
+    result.style.display='block'; result.innerText=JSON.stringify(data,null,2);
+    status.innerText='Detection complete.';
+  }catch(err){status.innerText='Error: '+err; result.style.display='block'; result.innerText=String(err);}
+};
+</script>
+</body>
+</html>
+"""
+
+@app.get("/ui", response_class=HTMLResponse)
+def ui():
+    return HTMLResponse(content=HTML_UI, status_code=200)
+
+@app.get("/")
+def root():
+    return {"message": "Smart Exercise & Posture Recognition API is running!"}
