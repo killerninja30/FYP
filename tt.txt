@@ -1,248 +1,131 @@
-from fastapi import APIRouter
-from fastapi.responses import StreamingResponse
-import threading, time, traceback, cv2
-import RPi.GPIO as GPIO
-from picamera2 import Picamera2
+from fastapi import APIRouter, Response
+from fastapi.responses import JSONResponse
 from ultralytics import YOLO
+from picamera2 import Picamera2
+import RPi.GPIO as GPIO
+import time
+import threading
+import traceback
+import random
 
-# ==========================================================
-# --- ROUTER SETUP ---
-# ==========================================================
-router = APIRouter(prefix="/api/smart-detection")
+router = APIRouter(tags=["Smart Detection"])
 
-# ==========================================================
-# --- GLOBAL CONFIGURATIONS ---
-# ==========================================================
+# ==============================
+# --- Global Config ---
+# ==============================
 RELAY_PINS = [2, 3, 4, 17]
-GRID_ROWS, GRID_COLS = 3, 3
-DURATION = 5
-FRAME_SKIP = 5
-
-# ==========================================================
-# --- GLOBAL STATE ---
-# ==========================================================
 GPIO.setmode(GPIO.BCM)
-GPIO.setwarnings(False)
-DETECTION_RUNNING = False
-DETECTION_THREAD = None
+for pin in RELAY_PINS:
+    GPIO.setup(pin, GPIO.OUT)
+    GPIO.output(pin, GPIO.HIGH)
+
+model = YOLO("yolov8n.pt")
+
 camera_instance = None
-model = None
+camera_lock = threading.Lock()
 
-# ==========================================================
-# --- HARDWARE CONTROL ---
-# ==========================================================
-def initialize_hardware():
-    for pin in RELAY_PINS:
-        GPIO.setup(pin, GPIO.OUT)
-        GPIO.output(pin, GPIO.HIGH)
-    print("[INFO] Hardware initialized")
-
-def cleanup_hardware():
-    GPIO.cleanup()
-    print("[INFO] GPIO cleaned up")
-
-def turn_off_all_relays():
-    for pin in RELAY_PINS:
-        GPIO.output(pin, GPIO.HIGH)
-
-# ==========================================================
-# --- CAMERA & MODEL ---
-# ==========================================================
 def get_camera():
     global camera_instance
-    if camera_instance is None:
-        try:
+    with camera_lock:
+        if camera_instance is None:
             camera_instance = Picamera2()
             camera_instance.preview_configuration.main.size = (640, 480)
             camera_instance.preview_configuration.main.format = "RGB888"
             camera_instance.configure("preview")
             camera_instance.start()
-            print("[INFO] Camera started")
-        except Exception as e:
-            print("[ERROR] Camera init failed:", e)
-            camera_instance = None
-    return camera_instance
+        return camera_instance
 
-def get_model():
-    global model
-    if model is None:
-        try:
-            print("[INFO] Loading YOLO model...")
-            model = YOLO("yolov8n.pt")
-        except Exception as e:
-            print("[ERROR] Model load failed:", e)
-            model = None
-    return model
 
-# ==========================================================
-# --- DETECTION FUNCTION ---
-# ==========================================================
-def run_detection():
-    picam2 = get_camera()
-    mdl = get_model()
+def turn_off_all_relays():
+    for pin in RELAY_PINS:
+        GPIO.output(pin, GPIO.HIGH)
 
-    if picam2 is None or mdl is None:
-        raise RuntimeError("Camera or model unavailable")
 
-    start_time = time.time()
-    frame_count = 0
-    frames_with_humans = 0
-    last_occupied_grids = set()
+# ==============================
+# --- Endpoints ---
+# ==============================
 
-    while (time.time() - start_time) < DURATION:
-        frame = picam2.capture_array()
-        h, w, _ = frame.shape
-        cell_h, cell_w = h // GRID_ROWS, w // GRID_COLS
-        frame_count += 1
-        if frame_count % FRAME_SKIP == 0:
-            results = mdl(frame, classes=0, conf=0.25, verbose=False)
-            current_frame_grids = set()
-            for r in results:
-                if len(r.boxes) > 0:
-                    frames_with_humans += 1
-                for box in r.boxes:
-                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                    cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
-                    gc, gr = int(cx // cell_w), int(cy // cell_h)
-                    if 0 <= gr < GRID_ROWS and 0 <= gc < GRID_COLS:
-                        current_frame_grids.add((gr, gc))
-            last_occupied_grids = current_frame_grids
-
-    human_detected = frames_with_humans > 0
-    active_columns = {c for (_, c) in last_occupied_grids}
-
-    # Relay control
-    GPIO.output(2, GPIO.LOW if 0 in active_columns else GPIO.HIGH)
-    GPIO.output(3, GPIO.LOW if 1 in active_columns else GPIO.HIGH)
-    for pin in [4, 17]:
-        GPIO.output(pin, GPIO.LOW if 2 in active_columns else GPIO.HIGH)
-
-    print(f"[INFO] Detection done | Humans: {human_detected}")
-    return {"human_detected": human_detected, "zones": list(last_occupied_grids)}
-
-# ==========================================================
-# --- BACKGROUND LOOP ---
-# ==========================================================
-def detection_loop():
-    global DETECTION_RUNNING
-    DETECTION_RUNNING = True
-    print("[INFO] Detection thread started")
-    try:
-        while DETECTION_RUNNING:
-            run_detection()
-            time.sleep(2)
-    except Exception as e:
-        print("[ERROR] Detection loop failed:", e)
-        traceback.print_exc()
-    finally:
-        turn_off_all_relays()
-        DETECTION_RUNNING = False
-        print("[INFO] Detection stopped")
-
-# ==========================================================
-# --- ROUTES ---
-# ==========================================================
-@router.get("/system/status")
+@router.get("/system-status")
 def system_status():
-    cam_ok = camera_instance is not None
     try:
-        relays = {pin: "ON" if GPIO.input(pin) == 0 else "OFF" for pin in RELAY_PINS}
-    except Exception:
-        relays = {}
-    return {"camera_available": cam_ok, "relay_pins": RELAY_PINS, "relays": relays}
-
-@router.get("/relay/status")
-def relay_status():
-    return {"relays": {pin: "ON" if GPIO.input(pin) == 0 else "OFF" for pin in RELAY_PINS}}
-
-@router.post("/initialize")
-def initialize():
-    initialize_hardware()
-    return {"message": "Hardware initialized"}
-
-@router.post("/detect")
-def detect_once():
-    try:
-        result = run_detection()
-        return {"status": "success", "result": result}
+        return {
+            "camera_available": True,
+            "relays_configured": len(RELAY_PINS),
+            "uptime": time.strftime("%H:%M:%S", time.gmtime(time.time())),
+        }
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
-@router.post("/start")
-def start_detection():
-    global DETECTION_THREAD, DETECTION_RUNNING
-    if DETECTION_RUNNING:
-        return {"message": "Detection already running"}
-    DETECTION_THREAD = threading.Thread(target=detection_loop, daemon=True)
-    DETECTION_THREAD.start()
-    return {"message": "Detection started"}
 
-@router.post("/stop")
-def stop_detection():
-    global DETECTION_RUNNING
-    DETECTION_RUNNING = False
-    return {"message": "Detection stopped"}
+@router.get("/relay-status")
+def relay_status():
+    states = {str(pin): ("ON" if GPIO.input(pin) == GPIO.LOW else "OFF") for pin in RELAY_PINS}
+    return {"relays": states}
 
-@router.post("/cleanup")
-def cleanup():
-    cleanup_hardware()
-    return {"message": "GPIO cleaned up"}
 
 @router.get("/analytics")
 def analytics():
     return {
-        "daily_detections": 5,
-        "humans_detected": True,
-        "zones_active": [1, 2],
-        "energy_saved_kwh": 2.3
+        "daily_detections": random.randint(1, 10),
+        "energy_saved": round(random.uniform(1.5, 5.0), 2)
     }
 
-@router.post("/relay/manual")
-def relay_manual(pin: int, state: str):
-    if pin not in RELAY_PINS:
-        return {"error": f"Invalid pin {pin}"}
-    GPIO.output(pin, GPIO.LOW if state.lower() == "on" else GPIO.HIGH)
-    return {"pin": pin, "state": state.upper()}
 
-@router.post("/emergency/stop")
+@router.post("/detect")
+def detect():
+    try:
+        picam2 = get_camera()
+        frame = picam2.capture_array()
+        results = model(frame, classes=0, conf=0.25, verbose=False)
+        human_detected = any(len(r.boxes) > 0 for r in results)
+
+        if human_detected:
+            GPIO.output(2, GPIO.LOW)
+            GPIO.output(3, GPIO.LOW)
+        else:
+            turn_off_all_relays()
+
+        return {
+            "human_detected": human_detected,
+            "occupied_zones": [(0, 1)] if human_detected else [],
+            "commands": [
+                {"zone": (0, 1), "status": "ON" if human_detected else "OFF", "appliances": ["Light", "Fan"]}
+            ]
+        }
+
+    except Exception as e:
+        print("[ERROR] Detection failed:", e)
+        traceback.print_exc()
+        return Response(
+            content='{"error": "Detection failed"}',
+            media_type="application/json",
+            status_code=500
+        )
+
+
+@router.post("/relay-control")
+def relay_control(relay: int, state: str):
+    if relay not in RELAY_PINS:
+        return {"error": "Invalid relay pin"}
+    GPIO.output(relay, GPIO.LOW if state.lower() == "on" else GPIO.HIGH)
+    return {"relay": relay, "state": state.upper()}
+
+
+@router.post("/emergency-stop")
 def emergency_stop():
-    global DETECTION_RUNNING
-    DETECTION_RUNNING = False
     turn_off_all_relays()
-    return {"status": "emergency stop", "relays": "off"}
+    return {"message": "All relays turned OFF in emergency stop."}
+
 
 @router.get("/alerts")
 def alerts():
-    return {
-        "alerts": [
-            {"type": "info", "message": "System running normally"},
-            {"type": "warning", "message": "Low light in Zone 3"}
-        ]
-    }
+    alerts_data = [
+        {"type": "warning", "message": "Camera temporarily offline"},
+        {"type": "info", "message": "All systems nominal"},
+    ]
+    return {"alerts": alerts_data}
 
-# ==========================================================
-# --- MJPEG PREVIEW ---
-# ==========================================================
-def mjpeg_stream():
-    picam2 = get_camera()
-    if picam2 is None:
-        yield b"--frame\r\nContent-Type: text/plain\r\n\r\nCamera not available\r\n"
-        return
-    while True:
-        frame = picam2.capture_array()
-        bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        h, w, _ = bgr.shape
-        cell_h, cell_w = h // GRID_ROWS, w // GRID_COLS
-        for i in range(1, GRID_ROWS):
-            cv2.line(bgr, (0, i * cell_h), (w, i * cell_h), (0, 255, 0), 1)
-        for j in range(1, GRID_COLS):
-            cv2.line(bgr, (j * cell_w, 0), (j * cell_w, h), (0, 255, 0), 1)
-        ret, jpeg = cv2.imencode(".jpg", bgr)
-        if not ret:
-            continue
-        yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg.tobytes() + b"\r\n")
-        time.sleep(0.05)
 
-@router.get("/preview")
-def preview():
-    return StreamingResponse(mjpeg_stream(), media_type="multipart/x-mixed-replace; boundary=frame")
+@router.on_event("shutdown")
+def cleanup_gpio():
+    GPIO.cleanup()
