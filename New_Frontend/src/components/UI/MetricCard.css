@@ -1,0 +1,219 @@
+.metric-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.metric-card:hover {
+  border-color: #667eea;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1), 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+/* Color variants */
+.metric-card-primary::before {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+}
+
+.metric-card-success::before {
+  background: linear-gradient(135deg, #11998e, #38ef7d);
+}
+
+.metric-card-warning::before {
+  background: linear-gradient(135deg, #f093fb, #f5576c);
+}
+
+.metric-card-danger::before {
+  background: linear-gradient(135deg, #fc466b, #3f5efb);
+}
+
+.metric-card-info::before {
+  background: linear-gradient(135deg, #00d2ff, #3a7bd5);
+}
+
+.metric-card-purple::before {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+}
+
+/* Size variants */
+.metric-card-small {
+  padding: 16px;
+}
+
+.metric-card-large {
+  padding: 32px;
+}
+
+.metric-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.metric-icon {
+  font-size: 32px;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  animation: icon-float 4s ease-in-out infinite;
+}
+
+@keyframes icon-float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-3px); }
+}
+
+.metric-card-primary .metric-icon {
+  background: rgba(102, 126, 234, 0.2);
+  border-color: rgba(102, 126, 234, 0.3);
+}
+
+.metric-card-success .metric-icon {
+  background: rgba(17, 153, 142, 0.2);
+  border-color: rgba(17, 153, 142, 0.3);
+}
+
+.metric-card-warning .metric-icon {
+  background: rgba(240, 147, 251, 0.2);
+  border-color: rgba(240, 147, 251, 0.3);
+}
+
+.metric-card-danger .metric-icon {
+  background: rgba(252, 70, 107, 0.2);
+  border-color: rgba(252, 70, 107, 0.3);
+}
+
+.metric-card-info .metric-icon {
+  background: rgba(0, 210, 255, 0.2);
+  border-color: rgba(0, 210, 255, 0.3);
+}
+
+.metric-card-purple .metric-icon {
+  background: rgba(102, 126, 234, 0.2);
+  border-color: rgba(102, 126, 234, 0.3);
+}
+
+.metric-trend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.trend-up {
+  background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+  color: #166534;
+}
+
+.trend-down {
+  background: linear-gradient(135deg, #fee2e2, #fecaca);
+  color: #991b1b;
+}
+
+.trend-neutral {
+  background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+  color: #475569;
+}
+
+.trend-icon {
+  font-size: 10px;
+}
+
+.trend-value {
+  font-weight: 700;
+}
+
+.metric-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.metric-value {
+  font-size: 36px;
+  font-weight: 800;
+  color: #1e293b;
+  line-height: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: linear-gradient(135deg, #1e293b, #475569);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.metric-card-small .metric-value {
+  font-size: 24px;
+}
+
+.metric-card-large .metric-value {
+  font-size: 40px;
+}
+
+.metric-unit {
+  font-size: 16px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.metric-card-small .metric-unit {
+  font-size: 14px;
+}
+
+.metric-card-large .metric-unit {
+  font-size: 20px;
+}
+
+.metric-title {
+  font-size: 14px;
+  color: #64748b;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.metric-card-small .metric-title {
+  font-size: 12px;
+}
+
+.metric-card-large .metric-title {
+  font-size: 16px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .metric-card {
+    padding: 16px;
+  }
+  
+  .metric-value {
+    font-size: 24px;
+  }
+  
+  .metric-icon {
+    font-size: 24px;
+    padding: 10px;
+  }
+  
+  .metric-card-large {
+    padding: 20px;
+  }
+  
+  .metric-card-large .metric-value {
+    font-size: 28px;
+  }
+}

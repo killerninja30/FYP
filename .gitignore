@@ -88,4 +88,15 @@ FYP_Frontend/.env.production.local
 Thumbs.db
 
 # Logs
-*.log
+*.log  
+# New Frontend (React/Node.js)  
+New_Frontend/node_modules/  
+New_Frontend/build/  
+New_Frontend/.DS_Store  
+New_Frontend/npm-debug.log*  
+New_Frontend/yarn-debug.log*  
+New_Frontend/yarn-error.log*  
+New_Frontend/.env.local  
+New_Frontend/.env.development.local  
+New_Frontend/.env.test.local  
+New_Frontend/.env.production.local 
