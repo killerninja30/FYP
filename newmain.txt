@@ -1,0 +1,66 @@
+# main.py
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+from app.routers import smart_detection  # Make sure __init__.py exists in app/routers
+
+import uvicorn
+
+# -----------------------------
+# Lifespan for startup/shutdown
+# -----------------------------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("?? Starting IoT Energy Management API...")
+    yield
+    print("?? Shutting down IoT Energy Management API...")
+
+# -----------------------------
+# FastAPI app initialization
+# -----------------------------
+app = FastAPI(
+    title="IoT Energy Management API",
+    description="Backend API for IoT-based Smart Energy Management System with Smart Detection (Mock Compatible)",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# -----------------------------
+# CORS Configuration
+# -----------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins on local LAN
+    allow_methods=["*"],
+    allow_headers=["*"],
+    allow_credentials=True
+)
+
+# -----------------------------
+# Include routers
+# -----------------------------
+app.include_router(
+    smart_detection.router,
+    prefix="/api/smart-detection",
+    tags=["smart-detection"]
+)
+
+# -----------------------------
+# Root endpoint
+# -----------------------------
+@app.get("/")
+async def root():
+    return {"message": "IoT Energy Management API with Smart Detection is running!"}
+
+# -----------------------------
+# Health endpoint
+# -----------------------------
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "iot-energy-backend"}
+
+# -----------------------------
+# Run app
+# -----------------------------
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
