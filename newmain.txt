@@ -2,7 +2,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from app.routers import smart_detection  # Make sure __init__.py exists in app/routers
+from app.routers import (
+    dashboard,
+    monitoring,
+    occupancy,
+    zone_control,
+    energy_analytics,
+    device_control,
+    smart_detection
+)
 
 import uvicorn
 
@@ -39,11 +47,13 @@ app.add_middleware(
 # -----------------------------
 # Include routers
 # -----------------------------
-app.include_router(
-    smart_detection.router,
-    prefix="/api/smart-detection",
-    tags=["smart-detection"]
-)
+app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
+app.include_router(monitoring.router, prefix="/api/monitoring", tags=["monitoring"])
+app.include_router(occupancy.router, prefix="/api/occupancy", tags=["occupancy"])
+app.include_router(zone_control.router, prefix="/api/zone-control", tags=["zone-control"])
+app.include_router(energy_analytics.router, prefix="/api/energy-analytics", tags=["energy-analytics"])
+app.include_router(device_control.router, prefix="/api/device-control", tags=["device-control"])
+app.include_router(smart_detection.router, prefix="/api/smart-detection", tags=["smart-detection"])
 
 # -----------------------------
 # Root endpoint
