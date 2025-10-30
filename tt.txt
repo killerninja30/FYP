@@ -1,0 +1,121 @@
+import os
+import cv2
+import time
+import torch
+import threading
+
+# ---------------------------------------------------------
+# Safe GPIO import (works both on Pi and non-Pi systems)
+# ---------------------------------------------------------
+try:
+    import RPi.GPIO as GPIO
+    HARDWARE_AVAILABLE = True
+    print("? RPi.GPIO successfully imported ï¿½ hardware mode enabled.")
+except (ImportError, RuntimeError):
+    HARDWARE_AVAILABLE = False
+    GPIO = None
+    print("?? RPi.GPIO not found ï¿½ running in simulation/mock mode.")
+
+# ---------------------------------------------------------
+# Mock GPIO class for non-Raspberry Pi environments
+# ---------------------------------------------------------
+class MockGPIO:
+    BCM = "BCM"
+    OUT = "OUT"
+    IN = "IN"
+    HIGH = 1
+    LOW = 0
+
+    def setmode(self, mode):
+        print(f"[MockGPIO] setmode({mode})")
+
+    def setwarnings(self, flag):
+        print(f"[MockGPIO] setwarnings({flag})")
+
+    def setup(self, pin, mode):
+        print(f"[MockGPIO] setup(pin={pin}, mode={mode})")
+
+    def output(self, pin, state):
+        print(f"[MockGPIO] output(pin={pin}, state={state})")
+
+    def cleanup(self):
+        print("[MockGPIO] cleanup()")
+
+# ---------------------------------------------------------
+# Global instances
+# ---------------------------------------------------------
+camera_instance = None
+model_instance = None
+
+# Example pin numbers for your relay / sensors
+RELAY_PINS = [17, 27, 22]
+
+# ---------------------------------------------------------
+# Hardware initialization
+# ---------------------------------------------------------
+def initialize_hardware():
+    global camera_instance, model_instance, GPIO   # <-- Fix: declare GPIO as global
+
+    if HARDWARE_AVAILABLE:
+        print("?? Initializing Raspberry Pi hardware...")
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setwarnings(False)
+        for pin in RELAY_PINS:
+            GPIO.setup(pin, GPIO.OUT)
+            GPIO.output(pin, GPIO.HIGH)
+        print("? Real GPIO hardware initialized successfully.")
+    else:
+        print("?? Using MockGPIO ï¿½ no real hardware detected.")
+        GPIO = MockGPIO()
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setwarnings(False)
+        for pin in RELAY_PINS:
+            GPIO.setup(pin, GPIO.OUT)
+            GPIO.output(pin, GPIO.HIGH)
+        print("? MockGPIO initialized successfully.")
+
+# ---------------------------------------------------------
+# Example cleanup function
+# ---------------------------------------------------------
+def cleanup_hardware():
+    global GPIO
+    if GPIO:
+        GPIO.cleanup()
+        print("?? GPIO cleaned up.")
+
+# ---------------------------------------------------------
+# Example camera / model setup (placeholder)
+# ---------------------------------------------------------
+def load_camera_and_model():
+    global camera_instance, model_instance
+    print("?? Loading camera and YOLO model...")
+    camera_instance = cv2.VideoCapture(0)
+    model_instance = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
+    print("? Camera and model loaded successfully.")
+
+# ---------------------------------------------------------
+# Example detection thread (placeholder)
+# ---------------------------------------------------------
+def detection_loop():
+    print("?? Starting detection loop...")
+    while True:
+        # Your detection logic here
+        time.sleep(2)
+
+# ---------------------------------------------------------
+# Module entry point
+# ---------------------------------------------------------
+if __name__ == "__main__":
+    initialize_hardware()
+    load_camera_and_model()
+
+    # Optional: start detection in background
+    t = threading.Thread(target=detection_loop, daemon=True)
+    t.start()
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        cleanup_hardware()
+        print("?? Program stopped safely.")
