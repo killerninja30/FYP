@@ -1,3 +1,4 @@
+from fastapi import APIRouter
 import os
 import cv2
 import time
@@ -5,19 +6,24 @@ import torch
 import threading
 
 # ---------------------------------------------------------
+# FastAPI Router setup
+# ---------------------------------------------------------
+router = APIRouter()
+
+# ---------------------------------------------------------
 # Safe GPIO import (works both on Pi and non-Pi systems)
 # ---------------------------------------------------------
 try:
     import RPi.GPIO as GPIO
     HARDWARE_AVAILABLE = True
-    print("? RPi.GPIO successfully imported ï¿½ hardware mode enabled.")
+    print("✅ RPi.GPIO successfully imported — hardware mode enabled.")
 except (ImportError, RuntimeError):
     HARDWARE_AVAILABLE = False
     GPIO = None
-    print("?? RPi.GPIO not found ï¿½ running in simulation/mock mode.")
+    print("⚠️ RPi.GPIO not found — running in simulation/mock mode.")
 
 # ---------------------------------------------------------
-# Mock GPIO class for non-Raspberry Pi environments
+# Mock GPIO class (for non-Raspberry Pi systems)
 # ---------------------------------------------------------
 class MockGPIO:
     BCM = "BCM"
@@ -42,80 +48,128 @@ class MockGPIO:
         print("[MockGPIO] cleanup()")
 
 # ---------------------------------------------------------
-# Global instances
+# Global instances and constants
 # ---------------------------------------------------------
 camera_instance = None
 model_instance = None
-
-# Example pin numbers for your relay / sensors
 RELAY_PINS = [17, 27, 22]
+DETECTION_THREAD = None
+DETECTION_RUNNING = False
 
 # ---------------------------------------------------------
 # Hardware initialization
 # ---------------------------------------------------------
 def initialize_hardware():
-    global camera_instance, model_instance, GPIO   # <-- Fix: declare GPIO as global
+    global camera_instance, model_instance, GPIO   # <-- Fix: global GPIO
 
     if HARDWARE_AVAILABLE:
-        print("?? Initializing Raspberry Pi hardware...")
+        print("🔧 Initializing Raspberry Pi hardware...")
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
         for pin in RELAY_PINS:
             GPIO.setup(pin, GPIO.OUT)
             GPIO.output(pin, GPIO.HIGH)
-        print("? Real GPIO hardware initialized successfully.")
+        print("✅ Real GPIO hardware initialized successfully.")
     else:
-        print("?? Using MockGPIO ï¿½ no real hardware detected.")
+        print("🧩 Using MockGPIO — no real hardware detected.")
         GPIO = MockGPIO()
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
         for pin in RELAY_PINS:
             GPIO.setup(pin, GPIO.OUT)
             GPIO.output(pin, GPIO.HIGH)
-        print("? MockGPIO initialized successfully.")
+        print("✅ MockGPIO initialized successfully.")
 
 # ---------------------------------------------------------
-# Example cleanup function
+# Cleanup
 # ---------------------------------------------------------
 def cleanup_hardware():
     global GPIO
     if GPIO:
         GPIO.cleanup()
-        print("?? GPIO cleaned up.")
+        print("🧹 GPIO cleaned up.")
 
 # ---------------------------------------------------------
-# Example camera / model setup (placeholder)
+# Camera & Model setup
 # ---------------------------------------------------------
 def load_camera_and_model():
     global camera_instance, model_instance
-    print("?? Loading camera and YOLO model...")
-    camera_instance = cv2.VideoCapture(0)
-    model_instance = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
-    print("? Camera and model loaded successfully.")
+    print("📸 Loading camera and YOLO model...")
+    try:
+        camera_instance = cv2.VideoCapture(0)
+        model_instance = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
+        print("✅ Camera and model loaded successfully.")
+    except Exception as e:
+        print(f"❌ Failed to load camera/model: {e}")
 
 # ---------------------------------------------------------
-# Example detection thread (placeholder)
+# Detection Loop (runs in background thread)
 # ---------------------------------------------------------
 def detection_loop():
-    print("?? Starting detection loop...")
-    while True:
-        # Your detection logic here
-        time.sleep(2)
+    global DETECTION_RUNNING
+    print("🚀 Starting detection loop...")
+    DETECTION_RUNNING = True
+    while DETECTION_RUNNING:
+        # Simulated detection logic
+        print("🧠 Detecting...")
+        time.sleep(5)
+    print("🛑 Detection loop stopped.")
 
 # ---------------------------------------------------------
-# Module entry point
+# FastAPI Endpoints
+# ---------------------------------------------------------
+@router.get("/status")
+async def get_status():
+    """Returns current smart detection status."""
+    return {
+        "hardware": "available" if HARDWARE_AVAILABLE else "mock",
+        "camera": "initialized" if camera_instance else "not initialized",
+        "detection": "running" if DETECTION_RUNNING else "stopped"
+    }
+
+@router.post("/initialize")
+async def api_initialize():
+    """Initialize hardware and model."""
+    initialize_hardware()
+    load_camera_and_model()
+    return {"message": "Hardware and model initialized successfully"}
+
+@router.post("/start")
+async def start_detection():
+    """Start the detection loop."""
+    global DETECTION_THREAD, DETECTION_RUNNING
+    if DETECTION_RUNNING:
+        return {"message": "Detection already running"}
+
+    DETECTION_THREAD = threading.Thread(target=detection_loop, daemon=True)
+    DETECTION_THREAD.start()
+    return {"message": "Detection started"}
+
+@router.post("/stop")
+async def stop_detection():
+    """Stop the detection loop."""
+    global DETECTION_RUNNING
+    DETECTION_RUNNING = False
+    return {"message": "Detection stopped"}
+
+@router.post("/cleanup")
+async def api_cleanup():
+    """Clean up GPIO and resources."""
+    cleanup_hardware()
+    return {"message": "GPIO cleaned up"}
+
+# ---------------------------------------------------------
+# Direct run (optional)
 # ---------------------------------------------------------
 if __name__ == "__main__":
     initialize_hardware()
     load_camera_and_model()
-
-    # Optional: start detection in background
     t = threading.Thread(target=detection_loop, daemon=True)
     t.start()
-
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
+        DETECTION_RUNNING = False
         cleanup_hardware()
-        print("?? Program stopped safely.")
+        print("🛑 Program stopped safely.")
