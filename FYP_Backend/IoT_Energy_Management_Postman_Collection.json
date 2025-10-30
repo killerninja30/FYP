@@ -1,0 +1,822 @@
+{
+  "info": {
+    "name": "IoT Energy Management System API",
+    "description": "Complete API collection for testing IoT Energy Management System endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        },
+        "description": "Check if the API server is running"
+      }
+    },
+    {
+      "name": "Dashboard APIs",
+      "item": [
+        {
+          "name": "Get Dashboard Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "dashboard", "summary"]
+            },
+            "description": "Get dashboard summary with key metrics"
+          }
+        },
+        {
+          "name": "Get All Rooms",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/rooms",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "dashboard", "rooms"]
+            },
+            "description": "Get all rooms data for dashboard"
+          }
+        },
+        {
+          "name": "Get Energy Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/energy",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "dashboard", "energy"]
+            },
+            "description": "Get energy consumption overview"
+          }
+        },
+        {
+          "name": "Get Dashboard Alerts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/alerts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "dashboard", "alerts"]
+            },
+            "description": "Get recent alerts for dashboard"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Real-time Monitoring APIs",
+      "item": [
+        {
+          "name": "Get Monitoring Rooms",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/monitoring/rooms",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "monitoring", "rooms"]
+            },
+            "description": "Get all rooms for real-time monitoring"
+          }
+        },
+        {
+          "name": "Get Real-time Energy",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/monitoring/energy",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "monitoring", "energy"]
+            },
+            "description": "Get real-time energy consumption data"
+          }
+        },
+        {
+          "name": "Get Room Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/monitoring/room/room-101",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "monitoring", "room", "room-101"]
+            },
+            "description": "Get detailed monitoring data for a specific room"
+          }
+        },
+        {
+          "name": "Get System Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/monitoring/system-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "monitoring", "system-status"]
+            },
+            "description": "Get overall system status and device counts"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Occupancy Detection APIs",
+      "item": [
+        {
+          "name": "Get All Cameras",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/occupancy/cameras",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "occupancy", "cameras"]
+            },
+            "description": "Get all camera feeds with occupancy detection"
+          }
+        },
+        {
+          "name": "Get Camera Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/occupancy/camera/cam-101",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "occupancy", "camera", "cam-101"]
+            },
+            "description": "Get detailed data for a specific camera"
+          }
+        },
+        {
+          "name": "Get Occupancy Analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/occupancy/analytics",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "occupancy", "analytics"]
+            },
+            "description": "Get occupancy analytics and patterns"
+          }
+        },
+        {
+          "name": "Get Occupancy Alerts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/occupancy/alerts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "occupancy", "alerts"]
+            },
+            "description": "Get occupancy-related alerts"
+          }
+        },
+        {
+          "name": "Calibrate Camera",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sensitivity\": 85,\n  \"detection_area\": {\n    \"x\": 0,\n    \"y\": 0,\n    \"width\": 1920,\n    \"height\": 1080\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/occupancy/camera/cam-101/calibrate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "occupancy", "camera", "cam-101", "calibrate"]
+            },
+            "description": "Calibrate a specific camera"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Zone Control APIs",
+      "item": [
+        {
+          "name": "Get All Zones",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/zone-control/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "zone-control", ""]
+            },
+            "description": "Get all zones with their device configurations"
+          }
+        },
+        {
+          "name": "Get Room Zones",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/zone-control/room-101",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "zone-control", "room-101"]
+            },
+            "description": "Get zones for a specific room"
+          }
+        },
+        {
+          "name": "Control Zone Device",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"turn_on\",\n  \"settings\": {\n    \"brightness\": 80\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/zone-control/room-101/zone-101-1/lights",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "zone-control", "room-101", "zone-101-1", "lights"]
+            },
+            "description": "Control a specific device in a zone"
+          }
+        },
+        {
+          "name": "Create Schedule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"schedule_name\": \"Working Hours\",\n  \"start_time\": \"08:00\",\n  \"end_time\": \"18:00\",\n  \"days\": [\"monday\", \"tuesday\", \"wednesday\", \"thursday\", \"friday\"],\n  \"actions\": [\n    {\n      \"device_type\": \"lights\",\n      \"action\": \"turn_on\",\n      \"settings\": {\n        \"brightness\": 90\n      }\n    },\n    {\n      \"device_type\": \"ac\",\n      \"action\": \"turn_on\",\n      \"settings\": {\n        \"temperature\": 22\n      }\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/zone-control/room-101/schedule",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "zone-control", "room-101", "schedule"]
+            },
+            "description": "Create a schedule for a room"
+          }
+        },
+        {
+          "name": "Get Schedule",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/zone-control/room-101/schedule",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "zone-control", "room-101", "schedule"]
+            },
+            "description": "Get schedule for a room"
+          }
+        },
+        {
+          "name": "Optimize Room",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"optimization_type\": \"energy_saving\",\n  \"target_savings\": 20\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/zone-control/room-101/optimize",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "zone-control", "room-101", "optimize"]
+            },
+            "description": "Apply energy optimization to a room"
+          }
+        },
+        {
+          "name": "Get Automation Alerts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/zone-control/automation/alerts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "zone-control", "automation", "alerts"]
+            },
+            "description": "Get automation-related alerts"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Energy Analytics APIs",
+      "item": [
+        {
+          "name": "Get Energy Overview - Daily",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/energy-analytics/overview?period=daily",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "energy-analytics", "overview"],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "daily"
+                }
+              ]
+            },
+            "description": "Get daily energy overview"
+          }
+        },
+        {
+          "name": "Get Energy Overview - Weekly",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/energy-analytics/overview?period=weekly",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "energy-analytics", "overview"],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "weekly"
+                }
+              ]
+            },
+            "description": "Get weekly energy overview"
+          }
+        },
+        {
+          "name": "Get Consumption Breakdown",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/energy-analytics/consumption",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "energy-analytics", "consumption"]
+            },
+            "description": "Get detailed consumption breakdown by room and device type"
+          }
+        },
+        {
+          "name": "Get Energy Trends",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/energy-analytics/trends",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "energy-analytics", "trends"]
+            },
+            "description": "Get energy usage trends and patterns"
+          }
+        },
+        {
+          "name": "Get Savings Analysis",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/energy-analytics/savings",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "energy-analytics", "savings"]
+            },
+            "description": "Get energy savings opportunities and analysis"
+          }
+        },
+        {
+          "name": "Get Summary Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/energy-analytics/reports?report_type=summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "energy-analytics", "reports"],
+              "query": [
+                {
+                  "key": "report_type",
+                  "value": "summary"
+                }
+              ]
+            },
+            "description": "Get summary energy report"
+          }
+        },
+        {
+          "name": "Get Detailed Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/energy-analytics/reports?report_type=detailed&start_date=2025-10-01&end_date=2025-10-14",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "energy-analytics", "reports"],
+              "query": [
+                {
+                  "key": "report_type",
+                  "value": "detailed"
+                },
+                {
+                  "key": "start_date",
+                  "value": "2025-10-01"
+                },
+                {
+                  "key": "end_date",
+                  "value": "2025-10-14"
+                }
+              ]
+            },
+            "description": "Get detailed energy report with date range"
+          }
+        },
+        {
+          "name": "Get Analytics Alerts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/energy-analytics/alerts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "energy-analytics", "alerts"]
+            },
+            "description": "Get energy analytics related alerts"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Device Control APIs",
+      "item": [
+        {
+          "name": "Get All Devices",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/device-control/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "device-control", ""]
+            },
+            "description": "Get all devices across all rooms"
+          }
+        },
+        {
+          "name": "Get Room Devices",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/device-control/room/room-101",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "device-control", "room", "room-101"]
+            },
+            "description": "Get all devices in a specific room"
+          }
+        },
+        {
+          "name": "Control Single Device",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"room_id\": \"room-101\",\n  \"zone_id\": \"zone-101-1\",\n  \"device_type\": \"lights\",\n  \"action\": \"adjust\",\n  \"brightness\": 75\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/device-control/control",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "device-control", "control"]
+            },
+            "description": "Control a single device (turn on/off/adjust)"
+          }
+        },
+        {
+          "name": "Control AC Temperature",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"room_id\": \"room-101\",\n  \"zone_id\": \"zone-101-1\",\n  \"device_type\": \"ac\",\n  \"action\": \"adjust\",\n  \"temperature\": 23\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/device-control/control",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "device-control", "control"]
+            },
+            "description": "Control AC temperature"
+          }
+        },
+        {
+          "name": "Control Fan Speed",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"room_id\": \"room-101\",\n  \"zone_id\": \"zone-101-2\",\n  \"device_type\": \"fans\",\n  \"action\": \"adjust\",\n  \"speed\": 60\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/device-control/control",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "device-control", "control"]
+            },
+            "description": "Control fan speed"
+          }
+        },
+        {
+          "name": "Bulk Control Devices",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"devices\": [\n    {\n      \"room_id\": \"room-101\",\n      \"zone_id\": \"zone-101-1\",\n      \"device_type\": \"lights\"\n    },\n    {\n      \"room_id\": \"room-101\",\n      \"zone_id\": \"zone-101-2\",\n      \"device_type\": \"lights\"\n    },\n    {\n      \"room_id\": \"room-102\",\n      \"zone_id\": \"zone-102-1\",\n      \"device_type\": \"lights\"\n    }\n  ],\n  \"action\": \"turn_on\",\n  \"settings\": {\n    \"brightness\": 80\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/device-control/bulk-control",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "device-control", "bulk-control"]
+            },
+            "description": "Control multiple devices at once"
+          }
+        },
+        {
+          "name": "Get Energy Consumption",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/device-control/energy-consumption",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "device-control", "energy-consumption"]
+            },
+            "description": "Get energy consumption by device type"
+          }
+        },
+        {
+          "name": "Get Device Status Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/device-control/status-overview",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "device-control", "status-overview"]
+            },
+            "description": "Get overview of device statuses"
+          }
+        },
+        {
+          "name": "Get Device Alerts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/device-control/alerts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "device-control", "alerts"]
+            },
+            "description": "Get device-related alerts"
+          }
+        }
+      ]
+    }
+  ]
+}

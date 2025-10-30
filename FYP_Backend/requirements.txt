@@ -1,0 +1,30 @@
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+sqlalchemy==2.0.23
+pydantic==2.5.0
+python-multipart==0.0.6
+websockets==12.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-decouple==3.8
+aiofiles==23.2.1
+httpx==0.25.2
+asyncio-mqtt==0.16.1
+
+# Smart Detection Dependencies
+ultralytics>=8.0.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# Raspberry Pi specific dependencies (install only on Pi)
+# picamera2>=0.3.0
+# RPi.GPIO>=0.7.1
+
+# Smart Detection Dependencies
+# Note: These should only be installed on Raspberry Pi with proper hardware
+# For development/testing, the application will use mock implementations
+ultralytics>=8.0.0  # YOLOv8 model
+opencv-python>=4.8.0  # Computer vision processing
+numpy>=1.24.0  # Array operations
+# picamera2  # Raspberry Pi camera interface - install manually on Pi
+# RPi.GPIO  # Raspberry Pi GPIO control - install manually on Pi
