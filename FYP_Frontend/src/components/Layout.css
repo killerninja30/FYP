@@ -1,0 +1,24 @@
+.layout {
+  min-height: 100vh;
+  background-color: #f5f7fa;
+}
+
+.layout-content {
+  display: flex;
+  margin-top: 70px; /* Account for navbar height */
+}
+
+.main-content {
+  flex: 1;
+  margin-left: 250px; /* Account for sidebar width */
+  padding: 20px;
+  min-height: calc(100vh - 70px);
+  transition: margin-left 0.3s ease;
+}
+
+@media (max-width: 768px) {
+  .main-content {
+    margin-left: 0;
+    padding: 10px;
+  }
+}
