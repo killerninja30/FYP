@@ -3,14 +3,12 @@ from pydantic import BaseModel
 from typing import List, Tuple
 import threading
 import time
+import random
 
-# -----------------------
-# Router
-# -----------------------
 router = APIRouter()
 
 # -----------------------
-# Mock GPIO for testing
+# Mock GPIO
 # -----------------------
 class MockGPIO:
     BCM = "BCM"
@@ -42,16 +40,12 @@ class MockGPIO:
 # -----------------------
 # Globals
 # -----------------------
-HARDWARE_AVAILABLE = False
 GPIO = MockGPIO()
 RELAY_PINS = [2, 3, 4, 17]
 DETECTION_RUNNING = False
 DETECTION_THREAD = None
 DETECTION_LOCK = threading.Lock()
 
-# -----------------------
-# Relay & Appliance Mapping
-# -----------------------
 APPLIANCE_MAP = {
     2: "Light 1",
     3: "Light 2",
@@ -73,7 +67,7 @@ class DetectionResponse(BaseModel):
     commands: List[CommandResult]
 
 # -----------------------
-# Hardware Init/Cleanup
+# Hardware Init / Cleanup
 # -----------------------
 def initialize_hardware():
     GPIO.setmode(GPIO.BCM)
@@ -88,25 +82,42 @@ def cleanup_hardware():
     print("?? GPIO cleaned up")
 
 # -----------------------
-# Detection Loop
+# Background Detection Loop
 # -----------------------
-def detection_loop():
+def mock_human_detection_scan():
+    """Simulates a 5-second human detection scan every 1 minute"""
     global DETECTION_RUNNING
     DETECTION_RUNNING = True
     while DETECTION_RUNNING:
+        print("🕒 Starting 5-second detection scan...")
+        start_time = time.time()
+        detected_relays = []
+
+        while time.time() - start_time < 5:
+            with DETECTION_LOCK:
+                # Randomly toggle relays to simulate detection
+                for pin in RELAY_PINS:
+                    if random.random() > 0.5:
+                        GPIO.output(pin, GPIO.LOW)  # ON
+                        detected_relays.append(pin)
+                    else:
+                        GPIO.output(pin, GPIO.HIGH)  # OFF
+            time.sleep(1)  # simulate frame interval
+
+        # Print summary of scan
         with DETECTION_LOCK:
-            # Toggle all relays ON/OFF for demo
-            for pin in RELAY_PINS:
-                GPIO.output(pin, GPIO.LOW)
-            print(f"[DETECTION] Relay states: {GPIO.states}")
-            time.sleep(2)
-            for pin in RELAY_PINS:
-                GPIO.output(pin, GPIO.HIGH)
-            time.sleep(2)
-    print("?? Detection stopped")
+            print(f"[DETECTION RESULT] Relays ON: {detected_relays}")
+            print(f"[DETECTION STATE] All relay states: {GPIO.states}")
+        
+        print("✅ 5-second detection complete. Waiting 55 seconds until next scan...\n")
+        # Wait remaining time to make it 1 minute interval
+        for _ in range(55):
+            if not DETECTION_RUNNING:
+                break
+            time.sleep(1)
 
 # -----------------------
-# Endpoints
+# API Endpoints
 # -----------------------
 @router.post("/initialize")
 def start_hardware():
@@ -115,6 +126,8 @@ def start_hardware():
 
 @router.post("/cleanup")
 def cleanup():
+    global DETECTION_RUNNING
+    DETECTION_RUNNING = False
     cleanup_hardware()
     return {"message": "Hardware cleaned up"}
 
@@ -123,9 +136,9 @@ def start_detection():
     global DETECTION_THREAD, DETECTION_RUNNING
     if DETECTION_RUNNING:
         return {"message": "Detection already running"}
-    DETECTION_THREAD = threading.Thread(target=detection_loop, daemon=True)
+    DETECTION_THREAD = threading.Thread(target=mock_human_detection_scan, daemon=True)
     DETECTION_THREAD.start()
-    return {"message": "Detection started"}
+    return {"message": "Detection thread started (5-second scan every 1 minute)"}
 
 @router.post("/stop")
 def stop_detection():
@@ -141,9 +154,6 @@ def status():
         "relays": GPIO.states
     }
 
-# -----------------------
-# New endpoints for frontend compatibility
-# -----------------------
 @router.get("/relay-status")
 def relay_status():
     return {"relays": GPIO.states}
@@ -166,15 +176,20 @@ def emergency_stop():
     DETECTION_RUNNING = False
     for pin in RELAY_PINS:
         GPIO.output(pin, GPIO.HIGH)
-    return {"message": "Emergency stop activated. All relays turned OFF"}
+    return {"message": "Emergency stop activated. All relays OFF"}
 
 @router.post("/detect", response_model=DetectionResponse)
 def detect():
+    # Return current relay states (mock detection snapshot)
     with DETECTION_LOCK:
-        commands = []
-        for pin in RELAY_PINS:
-            status = GPIO.states.get(pin, "OFF")
-            commands.append(CommandResult(relay_id=pin, status=status, appliance=APPLIANCE_MAP.get(pin, "Unknown")))
+        commands = [
+            CommandResult(
+                relay_id=pin,
+                status=GPIO.states.get(pin, "OFF"),
+                appliance=APPLIANCE_MAP.get(pin, "Unknown")
+            )
+            for pin in RELAY_PINS
+        ]
     return DetectionResponse(
         detection_running=DETECTION_RUNNING,
         relays=GPIO.states,
@@ -183,10 +198,8 @@ def detect():
 
 @router.get("/alerts")
 def alerts():
-    # Mock alerts
     return {"alerts": ["No motion detected", "Temperature normal"]}
 
 @router.get("/analytics")
 def analytics():
-    # Mock analytics data
     return {"energy_savings": "12%", "uptime": "98%", "last_active": "2 mins ago"}
